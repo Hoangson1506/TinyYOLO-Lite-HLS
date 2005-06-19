@@ -16,23 +16,23 @@ void tiny_yolo_lite(
 	const data_t bh[30],
 	data_t output[30][12][12]
 ) {
-    static data_t buffer_A[8][62][62];
-    static data_t buffer_B[8][31][31];
-    static data_t buffer_C[16][29][29];
-    static data_t buffer_D[16][14][14];
-    static data_t buffer_E[32][12][12];
+    data_t buffer_A[8][62][62];
+    data_t buffer_B[8][31][31];
+    data_t buffer_C[16][29][29];
+    data_t buffer_D[16][14][14];
+    data_t buffer_E[32][12][12];
 
     // LAYER 1: Conv2D + ReLu, Image -> buffer_A
-    conv2d<3, 64, 64, 8, 62, 62, 3, 1, 0, true>(input, w1, b1, buffer_A);
+    conv2d_1<3, 64, 64, 8, 62, 62, 3, 1, 0, true>(input, w1, b1, buffer_A);
     maxpool2d<8, 62, 62, 31, 31, 2, 2, 0>(buffer_A, buffer_B);
 
     // LAYER 2:
-    conv2d<8, 31, 31, 16, 29, 29, 3, 1, 0, true>(buffer_B, w2, b2, buffer_C);
+    conv2d_2<8, 31, 31, 16, 29, 29, 3, 1, 0, true>(buffer_B, w2, b2, buffer_C);
     maxpool2d<16, 29, 29, 14, 14, 2, 2, 0>(buffer_C, buffer_D);
 
     // LAYER 3:
-    conv2d<16, 14, 14, 32, 12, 12, 3, 1, 0, true>(buffer_D, w3, b3, buffer_E);
+    conv2d_3<16, 14, 14, 32, 12, 12, 3, 1, 0, true>(buffer_D, w3, b3, buffer_E);
 
     // HEAD: Conv2D 1x1, buffer_A -> local_output
-    conv2d<32, 12, 12, 30, 12, 12, 1, 1, 0, false>(buffer_E, wh, bh, output);
+    conv2d_head<32, 12, 12, 30, 12, 12, 1, 1, 0, false>(buffer_E, wh, bh, output);
 }

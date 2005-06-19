@@ -6,12 +6,16 @@
 #include "../src/yolo_utils.h"
 
 extern void tiny_yolo_lite(
-    const data_t *input_image,
-    const data_t *w_conv1, const data_t *b_conv1,
-    const data_t *w_conv2, const data_t *b_conv2,
-    const data_t *w_conv3, const data_t *b_conv3,
-    const data_t *w_head,  const data_t *b_head,
-    data_t *output_result
+    const data_t input[3][64][64],
+    const data_t w1[8][3][3][3],
+    const data_t b1[8],
+    const data_t w2[16][8][3][3],
+    const data_t b2[16],
+    const data_t w3[32][16][3][3],
+    const data_t b3[32],
+    const data_t wh[30][32][1][1],
+    const data_t bh[30],
+    data_t output[30][12][12]
 );
 
 template<typename T>
@@ -84,12 +88,18 @@ int main() {
     }
 
     std::cout << "Running Tiny-YOLO Lite C Simulation..." << std::endl;
-    tiny_yolo_lite(input_image.data(),
-				   w_conv1.data(), b_conv1.data(),
-				   w_conv2.data(), b_conv2.data(),
-				   w_conv3.data(), b_conv3.data(),
-				   w_head.data(),  b_head.data(),
-				   output_result.data());
+    tiny_yolo_lite(
+        (const data_t (*)[64][64]) input_image.data(),
+        (const data_t (*)[3][3][3]) w_conv1.data(),
+        (const data_t *) b_conv1.data(),
+        (const data_t (*)[8][3][3]) w_conv2.data(),
+        (const data_t *) b_conv2.data(),
+        (const data_t (*)[16][3][3]) w_conv3.data(),
+        (const data_t *) b_conv3.data(),
+        (const data_t (*)[32][1][1]) w_head.data(),
+        (const data_t *) b_head.data(),
+        (data_t (*)[12][12]) output_result.data()
+    );
     std::cout << "Simulation completed." << std::endl;
     std::cout << "Comparing output with golden reference..." << std::endl;
     if (!load_data_from_txt("data/outputs/dummy_output.txt", golden_output.data(), OUTPUT_SIZE)) {
