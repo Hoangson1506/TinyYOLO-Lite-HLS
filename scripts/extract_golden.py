@@ -15,20 +15,20 @@ def save_tensor_to_txt(tensor, filepath):
 class TinyYOLOLite(nn.Module):
     def __init__(self, num_classes=10, num_anchors=2):
         super(TinyYOLOLite, self).__init__()
-        self.conv1 = nn.Conv2d(3, 8, 3, 0, bias=True)
+        self.conv1 = nn.Conv2d(3, 8, 3, 1, 0, bias=True)
         self.relu1 = nn.ReLU()
 
         self.maxpool1 = nn.MaxPool2d(2, 2)
 
-        self.conv2 = nn.Conv2d(8, 16, 3, 0, bias=True)
+        self.conv2 = nn.Conv2d(8, 16, 3, 1, 0, bias=True)
         self.relu2 = nn.ReLU()
 
         self.maxpool2 = nn.MaxPool2d(2, 2)
 
-        self.conv3 = nn.Conv2d(16, 32, 3, 0, bias=True)
+        self.conv3 = nn.Conv2d(16, 32, 3, 1, 0, bias=True)
         self.relu3 = nn.ReLU()
 
-        self.detection_head = nn.Conv2d(32, num_anchors * (5 + num_classes), 1, 0, bias=True)
+        self.detection_head = nn.Conv2d(32, num_anchors * (5 + num_classes), 1, 1, 0, bias=True)
 
     def forward(self, x):
         x = self.conv1(x)
@@ -78,8 +78,7 @@ if __name__ == "__main__":
     save_tensor_to_txt(dummy_input, f'{base_dir}/inputs/dummy_input.txt')
 
     # FORWARD PASS
-    with torch.no_grad():
-        output = model(dummy_input)
+    output = model(dummy_input)
 
     # EXTRACT OUTPUT
     save_tensor_to_txt(output, f'{base_dir}/outputs/dummy_output.txt')
