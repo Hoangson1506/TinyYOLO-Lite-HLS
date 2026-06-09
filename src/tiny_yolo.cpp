@@ -5,6 +5,25 @@
 #define INPUT_WIDTH 64
 
 #define MAX_BUFFER_SIZE 32000
+#define MAX_WEIGHT_SIZE 4608 
+#define MAX_BIAS_SIZE 32
+
+void load_weights_and_bias(
+    const data_t *ddr_weight, const data_t *ddr_bias,
+    data_t *bram_weight, data_t *bram_bias,
+    int weight_size, int bias_size
+) {
+    Loop_Load_W: for (int i = 0; i < weight_size; i++) {
+        #pragma HLS PIPELINE II=1
+        bram_weight[i] = ddr_weight[i];
+    }
+    
+    Loop_Load_B: for (int i = 0; i < bias_size; i++) {
+        #pragma HLS PIPELINE II=1
+        bram_bias[i] = ddr_bias[i];
+    }
+}
+
 
 void tiny_yolo_lite(
     const data_t *input, // [3 * 64 * 64]
@@ -42,8 +61,17 @@ void tiny_yolo_lite(
     static data_t buffer_A[MAX_BUFFER_SIZE];
     static data_t buffer_B[MAX_BUFFER_SIZE];
 
+    static data_t local_w[MAX_WEIGHT_SIZE];
+    static data_t local_b[MAX_BIAS_SIZE];
+
+    #pragma HLS ARRAY_PARTITION variable=buffer_A cyclic factor=4
+    #pragma HLS ARRAY_PARTITION variable=buffer_B cyclic factor=4
+    #pragma HLS ARRAY_PARTITION variable=local_w cyclic factor=4
+    #pragma HLS ARRAY_PARTITION variable=local_b cyclic factor=4
+
     // LAYER 1: Conv2D + ReLu, Image -> buffer_A
-    conv2d(input, conv1_weights, conv1_bias, buffer_A,
+    load_weights_and_bias(conv1_weights, conv1_bias, local_w, local_b, (8*3*3*3), 8);
+    conv2d(input, local_w, local_b, buffer_A,
            3, 64, 64,  // Input: CI, IH, IW
            8, 62, 62,  // Output: CO, OH, OW
            3, 1, 0,      // Kernel=3, Stride=1, Padding=0
@@ -55,7 +83,8 @@ void tiny_yolo_lite(
               2, 2, 0);  // Kernel: K, S, P
 
     // LAYER 2:
-    conv2d(buffer_B, conv2_weights, conv2_bias, buffer_A,
+    load_weights_and_bias(conv2_weights, conv2_bias, local_w, local_b, (16*8*3*3), 16);
+    conv2d(buffer_B, local_w, local_b, buffer_A,
            8, 31, 31,   // Input: CI, IH, IW
            16, 29, 29,  // Output: CO, OH, OW
            3, 1, 0,      // Kernel=3, Stride=1, Padding=0
@@ -67,14 +96,16 @@ void tiny_yolo_lite(
               2, 2, 0);  // Kernel: K, S, P
     
     // LAYER 3:
-    conv2d(buffer_B, conv3_weights, conv3_bias, buffer_A,
+    load_weights_and_bias(conv3_weights, conv3_bias, local_w, local_b, (32*16*3*3), 32);
+    conv2d(buffer_B, local_w, local_b, buffer_A,
            16, 14, 14,   // Input: CI, IH, IW
            32, 12, 12,   // Output: CO, OH, OW
            3, 1, 0,      // Kernel=3, Stride=1, Padding=0
            true);        // Dùng ReLU
 
     // HEAD: Conv2D 1x1, buffer_A -> output
-    conv2d(buffer_A, w_head, b_head, output,
+    load_weights_and_bias(w_head, b_head, local_w, local_b, (30*32*1*1), 30);
+    conv2d(buffer_A, local_w, local_b, output,
            32, 12, 12,   // Input: CI, IH, IW
            30, 12, 12,     // Output: CO, OH, OW
            1, 1, 0,      // Kernel=1, Stride=1, Padding=0

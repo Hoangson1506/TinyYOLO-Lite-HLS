@@ -19,7 +19,7 @@ void maxpool2d(
                 data_t max_val = input[ci * (Hi * Wi) + first_hi * Wi + first_wi];
 
                 Loop_K: for (int k = 0; k < K * K; k++) {
-                    #pragma HLS UNROLL 
+                    #pragma HLS UNROLL factor=4
                     int kh = k / K;
                     int kw = k % K;
                     int hi = first_hi + kh;
