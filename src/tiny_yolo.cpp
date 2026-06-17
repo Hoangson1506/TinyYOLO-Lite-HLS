@@ -4,79 +4,35 @@
 #define INPUT_HEIGHT 64
 #define INPUT_WIDTH 64
 
-#define MAX_BUFFER_SIZE 32000
-
 void tiny_yolo_lite(
-    const data_t *input, // [3 * 64 * 64]
-    const data_t *conv1_weights, const data_t *conv1_bias,
-    const data_t *conv2_weights, const data_t *conv2_bias,
-    const data_t *conv3_weights, const data_t *conv3_bias,
-    const data_t *w_head, const data_t *b_head,
-    data_t *output // [30 * 8 * 8]
+	const data_t input[3][64][64],
+	const data_t w1[8][3][3][3],
+	const data_t b1[8],
+	const data_t w2[16][8][3][3],
+	const data_t b2[16],
+	const data_t w3[32][16][3][3],
+	const data_t b3[32],
+	const data_t wh[30][32][1][1],
+	const data_t bh[30],
+	data_t output[30][12][12]
 ) {
-    // ==========================================
-    // CHỈ ĐẠO HLS GIAO TIẾP PHẦN CỨNG (INTERFACES)
-    // ==========================================
-    // Sử dụng AXI4 Master (m_axi) để phần cứng có thể tự động DMA đọc/ghi RAM (DDR) bên ngoài
-    #pragma HLS INTERFACE m_axi port=input_image offset=slave bundle=gmem_in
-    #pragma HLS INTERFACE m_axi port=output_result offset=slave bundle=gmem_out
-    
-    // Gộp tất cả weights vào chung một bus để tiết kiệm cổng giao tiếp
-    #pragma HLS INTERFACE m_axi port=conv1_weights offset=slave bundle=gmem_weights
-    #pragma HLS INTERFACE m_axi port=conv1_bias offset=slave bundle=gmem_weights
-    #pragma HLS INTERFACE m_axi port=conv2_weights offset=slave bundle=gmem_weights
-    #pragma HLS INTERFACE m_axi port=conv2_bias offset=slave bundle=gmem_weights
-    #pragma HLS INTERFACE m_axi port=conv3_weights offset=slave bundle=gmem_weights
-    #pragma HLS INTERFACE m_axi port=conv3_bias offset=slave bundle=gmem_weights
-    #pragma HLS INTERFACE m_axi port=w_head offset=slave bundle=gmem_weights
-    #pragma HLS INTERFACE m_axi port=b_head offset=slave bundle=gmem_weights
-
-    // Sử dụng AXI4-Lite (s_axilite) làm các thanh ghi điều khiển từ CPU (ARM)
-    #pragma HLS INTERFACE s_axilite port=return bundle=CTRL_BUS
-
-    // ==========================================
-    // KHAI BÁO BỘ NHỚ TRUNG GIAN (PING-PONG BUFFERS)
-    // ==========================================
-    // Từ khóa 'static' đảm bảo HLS tổng hợp các mảng này thành BRAM vật lý trên FPGA
-    // thay vì tạo ra các thanh ghi (registers) rời rạc làm cháy chip.
-    static data_t buffer_A[MAX_BUFFER_SIZE];
-    static data_t buffer_B[MAX_BUFFER_SIZE];
+    static data_t buffer_A[8][62][62];
+    static data_t buffer_B[8][31][31];
+    static data_t buffer_C[16][29][29];
+    static data_t buffer_D[16][14][14];
+    static data_t buffer_E[32][12][12];
 
     // LAYER 1: Conv2D + ReLu, Image -> buffer_A
-    conv2d(input, conv1_weights, conv1_bias, buffer_A,
-           3, 64, 64,  // Input: CI, IH, IW
-           8, 62, 62,  // Output: CO, OH, OW
-           3, 1, 0,      // Kernel=3, Stride=1, Padding=0
-           true);        // Dùng ReLU
-    // buffer_A -> buffer_B maxpool
-    maxpool2d(buffer_A, buffer_B,
-              8, 62, 62,   // Input: CI, IH, IW
-              31, 31,    // Output: OH, OW 
-              2, 2, 0);  // Kernel: K, S, P
+    conv2d<3, 64, 64, 8, 62, 62, 3, 1, 0, true>(input, w1, b1, buffer_A);
+    maxpool2d<8, 62, 62, 31, 31, 2, 2, 0>(buffer_A, buffer_B);
 
     // LAYER 2:
-    conv2d(buffer_B, conv2_weights, conv2_bias, buffer_A,
-           8, 31, 31,   // Input: CI, IH, IW
-           16, 29, 29,  // Output: CO, OH, OW
-           3, 1, 0,      // Kernel=3, Stride=1, Padding=0
-           true);        // Dùng ReLU
-    // buffer_A -> buffer_B maxpool
-    maxpool2d(buffer_A, buffer_B,
-              16, 29, 29,   // Input: CI, IH, IW
-              14, 14,    // Output: OH, OW 
-              2, 2, 0);  // Kernel: K, S, P
-    
-    // LAYER 3:
-    conv2d(buffer_B, conv3_weights, conv3_bias, buffer_A,
-           16, 14, 14,   // Input: CI, IH, IW
-           32, 12, 12,   // Output: CO, OH, OW
-           3, 1, 0,      // Kernel=3, Stride=1, Padding=0
-           true);        // Dùng ReLU
+    conv2d<8, 31, 31, 16, 29, 29, 3, 1, 0, true>(buffer_B, w2, b2, buffer_C);
+    maxpool2d<16, 29, 29, 14, 14, 2, 2, 0>(buffer_C, buffer_D);
 
-    // HEAD: Conv2D 1x1, buffer_A -> output
-    conv2d(buffer_A, w_head, b_head, output,
-           32, 12, 12,   // Input: CI, IH, IW
-           30, 12, 12,     // Output: CO, OH, OW
-           1, 1, 0,      // Kernel=1, Stride=1, Padding=0
-           false);       // Không dùng ReLU ở layer cuối
+    // LAYER 3:
+    conv2d<16, 14, 14, 32, 12, 12, 3, 1, 0, true>(buffer_D, w3, b3, buffer_E);
+
+    // HEAD: Conv2D 1x1, buffer_A -> local_output
+    conv2d<32, 12, 12, 30, 12, 12, 1, 1, 0, false>(buffer_E, wh, bh, output);
 }

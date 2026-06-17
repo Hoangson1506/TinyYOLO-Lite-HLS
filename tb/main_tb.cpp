@@ -3,14 +3,15 @@
 #include <vector>
 #include <cmath>
 #include <string>
-#include "yolo_utils.h"
+#include "../src/yolo_utils.h"
 
 extern void tiny_yolo_lite(
-    const data_t *input_image, data_t *output_result,
+    const data_t *input_image,
     const data_t *w_conv1, const data_t *b_conv1,
     const data_t *w_conv2, const data_t *b_conv2,
     const data_t *w_conv3, const data_t *b_conv3,
-    const data_t *w_head,  const data_t *b_head
+    const data_t *w_head,  const data_t *b_head,
+    data_t *output_result
 );
 
 template<typename T>
@@ -74,8 +75,8 @@ int main() {
     load_ok &= load_data_from_txt("data/weights/conv2_bias.txt", b_conv2.data(), B2_SIZE);
     load_ok &= load_data_from_txt("data/weights/conv3_weight.txt", w_conv3.data(), W3_SIZE);
     load_ok &= load_data_from_txt("data/weights/conv3_bias.txt", b_conv3.data(), B3_SIZE);
-    load_ok &= load_data_from_txt("data/weights/head_weight.txt", w_head.data(),  W_HEAD_SIZE);
-    load_ok &= load_data_from_txt("data/weights/head_bias.txt", b_head.data(),  B_HEAD_SIZE);
+    load_ok &= load_data_from_txt("data/weights/detection_head_weight.txt", w_head.data(),  W_HEAD_SIZE);
+    load_ok &= load_data_from_txt("data/weights/detection_head_bias.txt", b_head.data(),  B_HEAD_SIZE);
 
     if (!load_ok) {
         std::cerr << "Error: Failed to load all data. Exiting." << std::endl;
@@ -83,11 +84,12 @@ int main() {
     }
 
     std::cout << "Running Tiny-YOLO Lite C Simulation..." << std::endl;
-    tiny_yolo_lite(input_image.data(), output_result.data(),
-                   w_conv1.data(), b_conv1.data(),
-                   w_conv2.data(), b_conv2.data(),
-                   w_conv3.data(), b_conv3.data(),
-                   w_head.data(),  b_head.data());
+    tiny_yolo_lite(input_image.data(),
+				   w_conv1.data(), b_conv1.data(),
+				   w_conv2.data(), b_conv2.data(),
+				   w_conv3.data(), b_conv3.data(),
+				   w_head.data(),  b_head.data(),
+				   output_result.data());
     std::cout << "Simulation completed." << std::endl;
     std::cout << "Comparing output with golden reference..." << std::endl;
     if (!load_data_from_txt("data/outputs/dummy_output.txt", golden_output.data(), OUTPUT_SIZE)) {
@@ -121,12 +123,14 @@ int main() {
     mse /= OUTPUT_SIZE;
 
     std::cout << "Total mismatches: " << mismatch_count << " out of " << OUTPUT_SIZE << std::endl;
-    std::cout << "Mean Squared Error: " << mse << std::endl;
-    std::cout << "Maximum absolute error: " << max_error << std::endl;
+    std::cout << "MSE: " << mse << std::endl;
+    std::cout << "MAE: " << max_error << std::endl;
 
     if (mismatch_count == 0) {
-        std::cout << "PASS: All outputs match the golden reference within the tolerance." << std::endl;
-    } else {
-        std::cout << "FAIL: There are some mismatches. Please check the above details for debugging." << std::endl;
-    }
+    	std::cout << "PASS: All outputs match the golden reference within the tolerance." << std::endl;
+		return 0;
+	} else {
+		std::cout << "FAIL: There are some mismatches. Please check the above details for debugging." << std::endl;
+		return 1;
+	}
 }
